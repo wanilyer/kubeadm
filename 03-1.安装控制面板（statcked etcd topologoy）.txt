@@ -1,0 +1,141 @@
+[TOC]
+
+## 高可用配置
+
+### 1. haproxy + keepalived
+
+#### 1.1 单haproxy（适合实验环境）
+安装
+
+`yum install -y haproxy`
+
+配置
+
+```
+frontend k8s
+ bind *:8443 # 监听端口
+ mode tcp
+ default_backend k8s-backend
+
+backend k8s-backend
+ balance roundrobin
+ mode tcp
+ # 其中x.x.x.x:6443为对应的api-server地址
+ server master-1 10.142.107.166:6443 check
+ server master-2 10.142.99.130:6443 check
+ server master-3 10.152.94.134:6443 check
+```
+
+## 安装第一个master节点
+
+1. `kubeadm-config` 文件配置
+```
+cat <<EOF > kubeadm-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+kubernetesVersion: v1.16.2
+controlPlaneEndpoint: "10.152.86.143:8443" # haproxy监听地址和端口
+networking:
+    podSubnet: "172.30.0.0/16" # 与网络方案的CIDR相对应
+imageRepository: registry.aliyuncs.com/google_containers # 修改镜像仓库地址，默认为k8s.gcr.io 容易拉取失败
+EOF
+```
++ 10.152.86.143 为haproxy安装机器ip
+
+2.  `kubeadm init`
+```
+kubeadm init --config=kubeadm-config.yaml --upload-certs
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+3. 验证
+
+```
+kubectl get pods -A
+```
+
+## 安装calico
+```
+# 参考文档 https://docs.projectcalico.org/v3.8/getting-started/kubernetes/
+wget https://docs.projectcalico.org/v3.8/manifests/calico.yaml
+
+# calico对应CALICO_IPV4POOL_CIDR参数需要修改为`kubeadm-config.yaml`文件的`networking.podSubnet`参数
+sed -i "s#192\.168\.0\.0/16#172\.30\.0\.0/16#" calico.yaml
+kubectl apply -f calico.yaml
+```
+
+## 加入master节点
+```
+kubeadm join 10.152.86.143:8443 \
+  --token umbx2c.2hge6z3g2behmyip \
+  --discovery-token-ca-cert-hash sha256:e3d4a94f04719fe473873c577a8f8c65fbee270318548a997ed1190c110398f3 \
+  --control-plane \
+  --certificate-key 99e4a60b0210cfb646ca894312c9991f809a4815b64763377857559efa74d156
+```
+
++ token: 默认有效时间为24h
+  * 查看token列表: `kubeadm token list`
+  * 重新创建token: `kubeadm token create`
+  * 生成永久有效token: `kubeadm token create --ttl 0`
++ discovery-token-ca-cert-hash: 
+  `openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'`
++ certificate-key: 
+  `kubeadm init phase upload-certs --upload-certs`
+  
+## 查看etcd集群状态
+```
+docker run --rm -it --net host -v /etc/kubernetes:/etc/kubernetes \
+registry.aliyuncs.com/google_containers/etcd:3.3.15 etcdctl \
+ --cert-file /etc/kubernetes/pki/etcd/peer.crt \
+ --key-file /etc/kubernetes/pki/etcd/peer.key \
+ --ca-file /etc/kubernetes/pki/etcd/ca.crt \
+ --endpoints https://10.152.107.166:2379 cluster-health
+```
++ 10.152.107.166 为任意master节点IP
+
+## 删除节点
+```
+# 在master节点上执行
+kubectl drain k8s-node --delete-local-data --force --ignore-daemonsets
+kubectl delete node k8s-node
+
+# 在node节点上执行
+kubeadm reset
+```
+
+## 问题集锦
+一.  控制面节点重新加入失败，无法加入etcd集群，主要有以下两个地方：
+1. 删除kubeadm-config中不存在的etcd
+```
+kubectl edit configmaps -n kube-system kubeadm-config
+```
+```
+  ClusterStatus: |
+    apiEndpoints:
+      master1.com:
+        advertiseAddress: 10.152.107.166
+        bindPort: 6443
+      master2.com:
+        advertiseAddress: 10.152.99.130
+        bindPort: 6443
+      master3.com:
+        advertiseAddress: 10.152.94.134
+        bindPort: 6443
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterStatus
+```
+
+2. 删除控制面节点时，etcd集群并未删除此节点上etcd成员导致etcd集群不健康
+```
+docker run --rm -it --net host -v /etc/kubernetes:/etc/kubernetes \
+registry.aliyuncs.com/google_containers/etcd:3.3.15 etcdctl \
+ --cert-file /etc/kubernetes/pki/etcd/peer.crt \
+ --key-file /etc/kubernetes/pki/etcd/peer.key \
+ --ca-file /etc/kubernetes/pki/etcd/ca.crt \
+ --endpoints https://10.152.107.166:2379 member remove ${ETCD_ID}
+```
+
++ ETCD_ID 可以通过 `cluster-health` 命令查看
