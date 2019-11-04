@@ -5,11 +5,12 @@
 ### 1. haproxy + keepalived
 
 #### 1.1 单haproxy（适合实验环境）
-安装
+1. 安装
+```
+yum install -y haproxy
+```
 
-`yum install -y haproxy`
-
-配置
+2. 配置
 
 ```
 frontend k8s
