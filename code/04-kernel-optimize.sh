@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# 优化内核参数
 cat > kubernetes.conf <<EOF
 net.bridge.bridge-nf-call-iptables=1
 net.bridge.bridge-nf-call-ip6tables=1

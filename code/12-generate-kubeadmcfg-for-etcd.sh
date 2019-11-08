@@ -18,15 +18,27 @@ kubernetesVersion: v1.16.2
 etcd:
     local:
         serverCertSANs:
-        - "${HOST}"
+        - "10.152.99.209"
+        - "10.142.99.209"
+        - "10.152.97.172"
+        - "10.142.97.172"
+        - "10.152.97.136"
+        - "10.142.97.136"
+        - "127.0.0.1"
         peerCertSANs:
-        - "${HOST}"
+        - "10.152.99.209"
+        - "10.142.99.209"
+        - "10.152.97.172"
+        - "10.142.97.172"
+        - "10.152.97.136"
+        - "10.142.97.136"
+        - "127.0.0.1"
         extraArgs:
             initial-cluster: ${NAMES[0]}=https://${ETCDHOSTS[0]}:2380,${NAMES[1]}=https://${ETCDHOSTS[1]}:2380,${NAMES[2]}=https://${ETCDHOSTS[2]}:2380
             initial-cluster-state: new
             name: ${NAME}
             listen-peer-urls: https://${HOST}:2380
-            listen-client-urls: https://${HOST}:2379
+            listen-client-urls: "https://127.0.0.1:2379,https://${HOST}:2379"
             advertise-client-urls: https://${HOST}:2379
             initial-advertise-peer-urls: https://${HOST}:2380
 imageRepository: registry.aliyuncs.com/google_containers # 修改镜像仓库地址，默认为k8s.gcr.io 容易拉取失败

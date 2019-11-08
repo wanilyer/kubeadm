@@ -1,7 +1,3 @@
-[TOC]
-
-## systemd 配置
-```
 #!/bin/bash
 
 # docker 配置文件
@@ -39,10 +35,4 @@ EOF
 systemctl restart docker
 systemctl daemon-reload
 systemctl restart kubelet
-```
-+ 配置cgroup-driver 为 systemd（官方推荐）
-+ 配置pause镜像下载仓库
-```
-## --pod-infra-container-image: 修改默认镜像拉取地址, 不设置此参数的话，默认会从k8s.gcr.io拉取pause镜像, 拉取失败后无法启动etcd容器
-## 关于kubelet启动参数设置，如：KUBELET_EXTRA_ARGS，请参考: https://kubernetes.io/docs/setup/independent/kubelet-integration/#the-kubelet-drop-in-file-for-systemd
-```
+
