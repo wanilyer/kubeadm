@@ -7,7 +7,7 @@ systemctl start docker
 cat > /etc/docker/daemon.json <<EOF
 {
   "registry-mirrors": ["https://xxx.mirror.aliyuncs.com"],
-  "exec-opts": ["native.cgroupdriver=cgroupfs"],
+  "exec-opts": ["native.cgroupdriver=systemd"],
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "100m"
